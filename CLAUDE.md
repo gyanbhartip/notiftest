@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Monorepo with two independent apps that talk over WebSocket:
 
-- `frontend/` — Expo (SDK 54) / React Native 0.81 / React 19 client. Uses `pnpm` (lockfile: `pnpm-lock.yaml`). Bare workflow (`android/` is committed). Entry: `index.ts` → `App.tsx`. Notification plumbing lives under `frontend/src/service/` (`websocket.ts`, `fcm.ts`, `notifications.ts`); UI debug surface in `frontend/src/components/ws.tsx`.
+- `frontend/` — Expo (SDK 54) / React Native 0.81 / React 19 client. Uses `pnpm` (lockfile: `pnpm-lock.yaml`). Bare workflow (`android/` is committed). Entry: `index.ts` → `App.tsx`. Notification plumbing lives under `frontend/src/service/` (`websocket.ts`, `fcm.ts`, `notifications.ts`, `deviceId.ts`). FCM handlers register in `index.ts`, not App.
 - `backend/fast/` — FastAPI server managed by `uv` (Python 3.14 pinned via `.python-version`). Owns the WebSocket primary path + a test REST endpoint.
 - `backend/dj/` — Django app (`fcmapp`) that receives FCM tokens from the client and (intended) sends push via Firebase for the fallback path. Project dir `fcmtest/`, app dir `fcmapp/` (views/urls/models/migrations). `fcmapp/libs/` is untracked vendored SDK material — keep it out of commits.
 
 Client → backend env vars (both in `frontend/.env.local`, both need the `EXPO_PUBLIC_` prefix):
 
-- `EXPO_PUBLIC_WS_URL` — FastAPI WebSocket endpoint (read in `src/service/websocket.ts` _and_ `src/components/ws.tsx`; changes must update both).
+- `EXPO_PUBLIC_WS_URL` — FastAPI WebSocket endpoint, read in `src/service/websocket.ts`.
 - `EXPO_PUBLIC_API_URL` — Django base URL, used by `src/service/fcm.ts` to POST the FCM token to `/fcm-token/`.
 
 ## Commands
@@ -34,6 +34,12 @@ Because this is a bare Expo project with native modules, Expo Go will not work �
 - `uv run ruff check .` / `uv run ruff format .` — lint / format (ruff is the only dev tool declared).
 
 No test suite exists yet in either app. If you add tests, wire the commands back into this file.
+
+Fast smoke checks (use these before claiming done):
+
+- `cd backend/fast && uv run ruff check .` — FastAPI lint
+- `cd backend/dj && uv run python manage.py check` — Django system checks
+- `cd frontend && npx tsc --noEmit --skipLibCheck` — TypeScript check (no Metro needed)
 
 ## Architecture (the non-obvious parts)
 
@@ -60,21 +66,63 @@ Implications:
 The harness deliberately runs two delivery routes:
 
 1. **Primary — WebSocket via FastAPI.** `src/service/websocket.ts` opens a persistent socket and calls `notifee.displayNotification(...)` directly on each message. Works only while the app is foregrounded and the socket is alive.
-2. **Fallback — FCM via Django.** On mount, `src/service/fcm.ts` registers with FCM, grabs the token, and POSTs it to Django at `${EXPO_PUBLIC_API_URL}/fcm-token/`. Django is expected to push via FCM when WS isn't viable (background/quit). Foreground + background handlers are registered at module import time in `fcm.ts`.
+2. **Fallback — FCM via Django.** On mount, `src/service/fcm.ts` registers with FCM, grabs the token, and POSTs it + `device_id` to Django at `${EXPO_PUBLIC_API_URL}/fcm-token/`. Django pushes via firebase_admin when WS isn't viable (background/quit). Foreground + background handlers are registered in `frontend/index.ts` (not in a component/module imported by `App.tsx`).
 
 If you change message shape, update both `websocket.ts` (direct Notifee payload) and the FCM payload Django sends — they must produce equivalent Notifee output.
 
-### Two WebSockets open per run (intentional footgun)
-
-`App.tsx` calls `connectWebSocket(...)` from `src/service/websocket.ts` _and_ renders `<WS />` from `src/components/ws.tsx`, which opens its _own_ separate socket for on-screen status display. Result: two connections, two random `user_id`s per launch. Fine for the test harness; do not copy into production. Also: `App.tsx` currently passes `token`/`userId` that are not defined in scope — known rough edge, expect the WS call to throw until wired.
-
 ### Frontend WS lifecycle
 
-Both `src/service/websocket.ts` (module-level `socket` singleton) and `src/components/ws.tsx` (component-local) open sockets with no cleanup and no reconnect. Expected for the harness; don't copy without adding `ws.close()` on unmount and a reconnect strategy.
+`src/service/websocket.ts` owns a module-level singleton socket keyed by `getDeviceId()` from `src/service/deviceId.ts`. `App.tsx` subscribes to status via `onWsStatus(...)` and calls `disconnectWebSocket()` on unmount. No reconnect logic — harness only.
+
+### Notifee + RN Firebase gotchas
+
+- Notifee `displayNotification` requires `android.channelId` **nested**, not top-level. Django's `send_fcm_notification` builds the payload with `android: { channelId, pressAction }` — keep that shape or the handler throws silently.
+- `messaging().setBackgroundMessageHandler(...)` MUST live in `frontend/index.ts` before `registerRootComponent`. Headless JS won't find it if it's only registered inside the `App` import tree.
+- Always `await notifee.createChannel({ id: 'default', ... })` idempotently inside the FCM handler — background/quit path can fire before `initializeNotifee()` runs.
+- Errors thrown inside `onMessage` / `setBackgroundMessageHandler` are swallowed silently by RN Firebase. Wrap display logic in `try/catch` + `console.warn`.
+
+### Django FCM wiring
+
+- `FCMToken` is keyed by `device_id` (unique CharField). No auth in the harness — `save_fcm_token` just upserts. Client generates `device_id` in `src/service/deviceId.ts` (random per launch).
+- firebase_admin initializes via `fcmapp/apps.py` `ready()` → imports `fcmapp/libs/fcm.py`, which resolves `serviceAccountKey.json` from `__file__`. Don't move the key without updating that path.
+- After changing `fcmapp/models.py`, delete `backend/dj/db.sqlite3` and re-run `uv run python manage.py migrate` — no prod data to preserve.
+- URLs are mounted at project root (not `/fcmapp/...`): `POST ${API_URL}/fcm-token/` and `POST ${API_URL}/test/send-fcm/` (form data: `device_id`, `title`, `body`).
 
 ### Notifee + Maven repo wiring
 
 `app.json` adds an `extraMavenRepos` entry pointing at `../../node_modules/@notifee/react-native/android/libs` through `expo-build-properties`. This is required for Android builds to resolve Notifee's AAR — if you restructure `node_modules` location (e.g., workspace hoisting) or change package managers, this relative path will break the Android build. Firebase is wired through `google-services.json` at `frontend/google-services.json`; package id is `com.gb.notiftest`.
+
+## Manual testing (Postman / curl)
+
+Prereqs: FastAPI on `:8000`, Django on `:8001`, Android app running, `deviceId` visible on screen. Replace `<host>` with the dev machine's LAN IP (or `127.0.0.1` on emulator).
+
+### 1. Primary path — WebSocket via FastAPI
+
+Client auto-connects on launch. To fire a notification through the open socket:
+
+```bash
+curl -X POST "http://<host>:8000/api/test/send-ws-notification?user_id=<deviceId>&title=Hello&body=from+WS"
+```
+
+Postman: `POST http://<host>:8000/api/test/send-ws-notification` with query params `user_id`, `title`, `body`. Expect tray notification + `📤 Sent WS notification to <deviceId>` in FastAPI logs.
+
+### 2. Fallback path — FCM via Django
+
+Token registration happens automatically on app launch (watch Django logs for `POST /fcm-token/ 200`). Then trigger a push:
+
+```bash
+curl -X POST "http://<host>:8001/test/send-fcm/" \
+  -d "device_id=<deviceId>" \
+  -d "title=Hello" \
+  -d "body=from+FCM"
+```
+
+Postman: `POST http://<host>:8001/test/send-fcm/` with `x-www-form-urlencoded` body: `device_id`, `title`, `body`. Omit `device_id` to fan-out to every saved token. Expect Django log `✅ FCM sent to ... → projects/<proj>/messages/...` and a Metro log `📨 FCM received: ...` then a tray notification.
+
+### Troubleshooting
+
+- Django returns `200` but nothing on device → check Metro for `📨 FCM received`. If absent, handlers aren't registered at entry (see Notifee gotchas). If present but no tray notification, look for `FCM display failed` — most common cause is a payload shape mismatch with Notifee.
+- WS curl works but FCM doesn't → put app in background before firing FCM to confirm background handler path. Foreground-only delivery means `setBackgroundMessageHandler` never ran.
 
 ## Conventions specific to this repo
 
