@@ -37,5 +37,14 @@ yarn-error.*
 *.tsbuildinfo
 
 # generated native folders
-/ios
-/android
+frontend/ios
+frontend/android
+
+# google-services
+google-services.json
+
+# backend
+*.pyc
+__pycache__/
+.venv/
+*.sqlite3

@@ -1,0 +1,15 @@
+[project]
+name = "fast"
+version = "0.1.0"
+description = "FastAPI based backend server for testing WS"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard]>=0.136.0",
+    "websockets>=16.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.11",
+]
