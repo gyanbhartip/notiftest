@@ -1,88 +1,79 @@
-# notifications/views.py
 import json
+import time
+
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from firebase_admin import messaging
-
-from django.contrib.auth.decorators import (
-    login_required,
-)  # ← only if you use session auth
 
 from .models import FCMToken
 
 
-def send_fcm_notification(user, title: str, body: str):
-    tokens_qs = FCMToken.objects.filter(user=user).values_list("token", flat=True)
-    tokens = list(tokens_qs)
+def send_fcm_notification(device_id: str | None, title: str, body: str) -> int:
+    qs = FCMToken.objects.all()
+    if device_id:
+        qs = qs.filter(device_id=device_id)
+    tokens = list(qs.values_list("token", flat=True))
 
     if not tokens:
-        print(f"No FCM tokens found for user {user}")
-        return False
+        print(f"No FCM tokens for device_id={device_id!r}")
+        return 0
 
     notifee_payload = {
-        "id": f"fcm-{int(messaging.datetime.now().timestamp())}",
+        "id": f"fcm-{int(time.time())}",
         "title": title,
         "body": body,
-        "channelId": "default",
+        "android": {
+            "channelId": "default",
+            "pressAction": {"id": "default"},
+        },
     }
 
-    success_count = 0
+    sent = 0
     for token in tokens:
         message = messaging.Message(
-            token=token, data={"notifee": json.dumps(notifee_payload)}
+            token=token,
+            data={"notifee": json.dumps(notifee_payload)},
         )
         try:
-            response = messaging.send(message)
-            print(f"✅ FCM sent to {token[:20]}... → {response}")
-            success_count += 1
+            resp = messaging.send(message)
+            print(f"✅ FCM sent to {token[:20]}… → {resp}")
+            sent += 1
         except Exception as e:
-            error_str = str(e).lower()
-            print(f"❌ FCM failed for token: {error_str}")
-            if "not registered" in error_str or "invalid" in error_str:
-                FCMToken.objects.filter(token=token).delete()  # clean up bad token
-    return success_count > 0
+            err = str(e).lower()
+            print(f"❌ FCM failed: {err}")
+            if "not registered" in err or "invalid" in err:
+                FCMToken.objects.filter(token=token).delete()
+    return sent
 
 
 @csrf_exempt
-# @login_required   # ← remove / replace with your real auth (see note below)
+@require_http_methods(["POST"])
 def save_fcm_token(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST method required"}, status=405)
-
     try:
         data = json.loads(request.body)
-        token = data.get("token")
-
-        if not token:
-            return JsonResponse({"error": "token is required"}, status=400)
-
-        # ── Authentication check ──
-        # Make sure request.user is set by your auth system
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
-
-        # Update or create (supports multi-device: same user can have many tokens)
-        FCMToken.objects.update_or_create(token=token, defaults={"user": request.user})
-
-        return JsonResponse({"status": "success", "message": "FCM token saved/updated"})
-
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+
+    token = data.get("token")
+    device_id = data.get("device_id")
+
+    if not token or not device_id:
+        return JsonResponse({"error": "token and device_id are required"}, status=400)
+
+    FCMToken.objects.update_or_create(device_id=device_id, defaults={"token": token})
+    return JsonResponse({"status": "saved", "device_id": device_id})
 
 
-# ── TEST VIEW (hit from browser/Postman) ──
 @csrf_exempt
+@require_http_methods(["GET", "POST"])
 def test_send_fcm(request):
-    if request.method == "POST":
-        token = request.POST.get("token") or request.GET.get("token")
-        title = request.POST.get("title", "Test FCM")
-        body = request.POST.get("body", "Hello from Django FCM!")
+    if request.method == "GET":
+        return JsonResponse({"info": "POST device_id (optional), title, body"})
 
-        if not token:
-            return JsonResponse({"error": "Missing token"}, status=400)
+    device_id = request.POST.get("device_id") or request.GET.get("device_id")
+    title = request.POST.get("title", "Test FCM")
+    body = request.POST.get("body", "Hello from Django FCM!")
 
-        success = send_fcm_notification(token, title, body)
-        return JsonResponse({"status": "sent" if success else "failed"})
-    return JsonResponse({"info": "POST token, title, body"})
+    sent = send_fcm_notification(device_id, title, body)
+    return JsonResponse({"status": "sent" if sent else "failed", "count": sent})

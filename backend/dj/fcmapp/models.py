@@ -1,10 +1,9 @@
 from django.db import models
-from django.contrib.auth.models import User
 
 
 class FCMToken(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="fcm_tokens")
-    token = models.TextField(unique=True)
+    device_id = models.CharField(max_length=128, unique=True)
+    token = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -12,4 +11,4 @@ class FCMToken(models.Model):
         ordering = ["-updated_at"]
 
     def __str__(self):
-        return f"{self.user.username} – {self.token[:30]}..."
+        return f"{self.device_id} - {self.token[:30]}..."

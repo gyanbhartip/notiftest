@@ -38,14 +38,10 @@ async def websocket_endpoint(
     await manager.connect(websocket, user_id)
     try:
         while True:
-            # You can ignore incoming messages for now (or handle pings)
-            await websocket.receive_text()
-            print("Received message from user:", await websocket.receive_text())
-            await websocket.send_text("Message received")
-            print("Sent message to user:", "Message received")
+            msg = await websocket.receive_text()
+            print(f"📩 from {user_id}: {msg}")
     except WebSocketDisconnect:
         manager.disconnect(user_id)
-        print(f"❌ WS disconnected for user: {user_id}")
 
 
 # ── TEST ENDPOINT ──

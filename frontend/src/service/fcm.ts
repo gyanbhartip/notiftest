@@ -3,39 +3,47 @@ import messaging, {
     type RemoteMessage,
 } from '@react-native-firebase/messaging';
 
+import { getDeviceId } from './deviceId';
+
 export const getAndSendFcmToken = async () => {
     await messaging().registerDeviceForRemoteMessages();
     const token = await messaging().getToken();
-    // Send to your Django backend
-    await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/fcm-token/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-    });
-};
+    console.log('📱 FCM token:', token.slice(0, 24), '…');
 
-export const onMessageReceived = async (remoteMessage: RemoteMessage) => {
-    // Django sends either:
-    // A) Full Notifee payload in data.notifee (recommended)
-    // B) Minimal data → you build the notification here
-
-    if (remoteMessage.data?.notifee) {
-        await notifee.displayNotification(
-            JSON.parse(remoteMessage.data.notifee),
-        );
-    } else {
-        // Option B – build from minimal data
-        await notifee.displayNotification({
-            title: remoteMessage.notification?.title || 'New Notification',
-            body: remoteMessage.notification?.body || '',
-            data: remoteMessage.data,
-            android: { channelId: 'default' },
-        });
+    const res = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL ?? ''}/fcm-token/`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, device_id: getDeviceId() }),
+        },
+    );
+    if (!res.ok) {
+        console.warn('FCM token registration failed', res.status);
     }
 };
 
-// Foreground
-messaging().onMessage(onMessageReceived);
+const ensureDefaultChannel = async () => {
+    await notifee.createChannel({ id: 'default', name: 'Default Channel' });
+};
 
-// Background / Quit (CRITICAL)
-messaging().setBackgroundMessageHandler(onMessageReceived);
+export const onMessageReceived = async (remoteMessage: RemoteMessage) => {
+    console.log('📨 FCM received:', JSON.stringify(remoteMessage));
+    try {
+        await ensureDefaultChannel();
+
+        if (remoteMessage.data?.notifee) {
+            const payload = JSON.parse(remoteMessage.data.notifee);
+            await notifee.displayNotification(payload);
+            return;
+        }
+        await notifee.displayNotification({
+            title: remoteMessage.notification?.title || 'New Notification',
+            body: remoteMessage.notification?.body || '',
+            data: (remoteMessage.data as Record<string, string>) ?? {},
+            android: { channelId: 'default' },
+        });
+    } catch (e) {
+        console.warn('FCM display failed', e);
+    }
+};

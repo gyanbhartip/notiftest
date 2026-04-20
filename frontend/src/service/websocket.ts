@@ -1,42 +1,60 @@
 import notifee from '@notifee/react-native';
 
-let socket: WebSocket | null = null;
+type StatusListener = (status: string) => void;
 
-export const connectWebSocket = (userToken: string, userId: string) => {
+let socket: WebSocket | null = null;
+const listeners: Array<StatusListener> = [];
+let lastStatus = 'idle';
+
+const emit = (status: string) => {
+    lastStatus = status;
+    for (const l of listeners) l(status);
+};
+
+export const onWsStatus = (cb: StatusListener) => {
+    listeners.push(cb);
+    cb(lastStatus);
+    return () => {
+        const i = listeners.indexOf(cb);
+        if (i >= 0) listeners.splice(i, 1);
+    };
+};
+
+export const connectWebSocket = (userId: string) => {
     if (socket) return;
 
-    socket = new WebSocket(
-        `${process.env.EXPO_PUBLIC_WS_URL ?? ''}?token=${userToken}&user_id=${userId}`,
-    );
+    const url = `${process.env.EXPO_PUBLIC_WS_URL ?? ''}?user_id=${encodeURIComponent(userId)}`;
+    socket = new WebSocket(url);
+    emit('connecting');
 
-    socket.onopen = () => {
-        console.log('✅ WS connected - primary notification path active');
-    };
+    socket.onopen = () => emit('connected');
 
     socket.onmessage = async event => {
-        const data = JSON.parse(event.data); // { title, body, data?, android?, ios? }
-
-        // Display via Notifee (primary path)
-        await notifee.displayNotification({
-            id: data.id || Date.now().toString(),
-            title: data.title,
-            body: data.body,
-            data: data.data || {}, // for deep linking / actions
-            android: {
-                channelId: data.channelId || 'default',
-                pressAction: { id: 'default' },
-                ...data.android, // rich styles, actions, etc.
-            },
-            ios: data.ios,
-        });
+        try {
+            const data = JSON.parse(event.data);
+            await notifee.displayNotification({
+                id: data.id || Date.now().toString(),
+                title: data.title,
+                body: data.body,
+                data: data.data || {},
+                android: {
+                    channelId: data.channelId || 'default',
+                    pressAction: { id: 'default' },
+                    ...data.android,
+                },
+                ios: data.ios,
+            });
+        } catch (e) {
+            console.warn('WS message parse/display failed', e);
+        }
     };
+
+    socket.onerror = () => emit('error');
 
     socket.onclose = () => {
-        console.log('WS closed - falling back to FCM');
         socket = null;
+        emit('disconnected');
     };
-
-    socket.onerror = e => console.error('WS error', e);
 };
 
 export const disconnectWebSocket = () => {
