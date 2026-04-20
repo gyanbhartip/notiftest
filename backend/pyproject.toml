@@ -10,6 +10,7 @@ dependencies = [
     "django-filter>=25.2",
     "djangorestframework>=3.17.1",
     "fastapi[standard]>=0.136.0",
+    "firebase-admin>=7.4.0",
     "markdown>=3.10.2",
     "websockets>=16.0",
 ]

@@ -48,5 +48,6 @@ google-services.json
 __pycache__/
 .venv/
 *.sqlite3
+serviceAccountKey.json
 # Added by code-review-graph
 .code-review-graph/

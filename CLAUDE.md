@@ -6,11 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Monorepo with two independent apps that talk over WebSocket:
 
-- `frontend/` — Expo (SDK 54) / React Native 0.81 / React 19 client. Uses `pnpm` (lockfile: `pnpm-lock.yaml`). Bare workflow (`android/` is committed); push notifications via `@react-native-firebase/messaging` + local display via `@notifee/react-native`.
-- `backend/fast/` — FastAPI server managed by `uv` (Python 3.14 pinned via `.python-version`). Exposes the WebSocket + test REST endpoint the client connects to.
-- `backend/dj/` — Django backend scaffold. Currently only a `.venv`; no source yet. Do not assume it is runnable — confirm before touching.
+- `frontend/` — Expo (SDK 54) / React Native 0.81 / React 19 client. Uses `pnpm` (lockfile: `pnpm-lock.yaml`). Bare workflow (`android/` is committed). Entry: `index.ts` → `App.tsx`. Notification plumbing lives under `frontend/src/service/` (`websocket.ts`, `fcm.ts`, `notifications.ts`); UI debug surface in `frontend/src/components/ws.tsx`.
+- `backend/fast/` — FastAPI server managed by `uv` (Python 3.14 pinned via `.python-version`). Owns the WebSocket primary path + a test REST endpoint.
+- `backend/dj/` — Django app (`fcmapp`) that receives FCM tokens from the client and (intended) sends push via Firebase for the fallback path. Project dir `fcmtest/`, app dir `fcmapp/` (views/urls/models/migrations). `fcmapp/libs/` is untracked vendored SDK material — keep it out of commits.
 
-The frontend connects to the backend via a single env var `EXPO_PUBLIC_WS_URL` (read in `frontend/App.tsx`, set in `frontend/.env.local`). Anything that changes the WS URL shape must be updated in both places.
+Client → backend env vars (both in `frontend/.env.local`, both need the `EXPO_PUBLIC_` prefix):
+
+- `EXPO_PUBLIC_WS_URL` — FastAPI WebSocket endpoint (read in `src/service/websocket.ts` _and_ `src/components/ws.tsx`; changes must update both).
+- `EXPO_PUBLIC_API_URL` — Django base URL, used by `src/service/fcm.ts` to POST the FCM token to `/fcm-token/`.
 
 ## Commands
 
@@ -52,9 +55,22 @@ Implications:
 
 `main.py` sets `allow_origins=["*"]` with credentials. Fine for a local test harness, not for anything shared. Tighten before deploying.
 
+### Dual notification path (WS primary, FCM fallback)
+
+The harness deliberately runs two delivery routes:
+
+1. **Primary — WebSocket via FastAPI.** `src/service/websocket.ts` opens a persistent socket and calls `notifee.displayNotification(...)` directly on each message. Works only while the app is foregrounded and the socket is alive.
+2. **Fallback — FCM via Django.** On mount, `src/service/fcm.ts` registers with FCM, grabs the token, and POSTs it to Django at `${EXPO_PUBLIC_API_URL}/fcm-token/`. Django is expected to push via FCM when WS isn't viable (background/quit). Foreground + background handlers are registered at module import time in `fcm.ts`.
+
+If you change message shape, update both `websocket.ts` (direct Notifee payload) and the FCM payload Django sends — they must produce equivalent Notifee output.
+
+### Two WebSockets open per run (intentional footgun)
+
+`App.tsx` calls `connectWebSocket(...)` from `src/service/websocket.ts` _and_ renders `<WS />` from `src/components/ws.tsx`, which opens its _own_ separate socket for on-screen status display. Result: two connections, two random `user_id`s per launch. Fine for the test harness; do not copy into production. Also: `App.tsx` currently passes `token`/`userId` that are not defined in scope — known rough edge, expect the WS call to throw until wired.
+
 ### Frontend WS lifecycle
 
-`App.tsx` opens the socket inside `useEffect(..., [])` with no cleanup and no reconnect — expected for a throwaway harness, but don't copy this pattern into production code without adding `ws.close()` on unmount and a reconnect strategy.
+Both `src/service/websocket.ts` (module-level `socket` singleton) and `src/components/ws.tsx` (component-local) open sockets with no cleanup and no reconnect. Expected for the harness; don't copy without adding `ws.close()` on unmount and a reconnect strategy.
 
 ### Notifee + Maven repo wiring
 
