@@ -5,11 +5,14 @@ description = "FastAPI based backend server for testing WS"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "code-review-graph>=2.3.2",
+    "django>=6.0.4",
+    "django-filter>=25.2",
+    "djangorestframework>=3.17.1",
     "fastapi[standard]>=0.136.0",
+    "markdown>=3.10.2",
     "websockets>=16.0",
 ]
 
 [dependency-groups]
-dev = [
-    "ruff>=0.15.11",
-]
+dev = ["ruff>=0.15.11"]

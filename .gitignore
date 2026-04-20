@@ -48,3 +48,5 @@ google-services.json
 __pycache__/
 .venv/
 *.sqlite3
+# Added by code-review-graph
+.code-review-graph/
