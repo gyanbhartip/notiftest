@@ -1,3 +1,10 @@
 {
-    "enabledMcpjsonServers": ["code-review-graph"]
+  "enabledMcpjsonServers": [
+    "code-review-graph"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(bash ~/.claude/skills/resume-plan-execution/scripts/preflight.sh \"docs/superpowers/plans/2026-04-21-service-engineer-offer.md\")"
+    ]
+  }
 }
