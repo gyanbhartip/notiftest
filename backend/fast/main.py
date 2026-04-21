@@ -1,13 +1,10 @@
+# backend/fast/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers.notifications import router as notifications_router
 
-app = FastAPI(
-    title="Notification Test API",
-    description="API for testing notifications",
-    version="0.1.0",
-    root_path="/",
-)
+from routers import dev, notifications, offers, presence
+
+app = FastAPI(title="notiftest-backend")
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,9 +14,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(notifications_router, prefix="/api", tags=["notifications"])
+app.include_router(notifications.router)
+app.include_router(offers.router)
+app.include_router(presence.router)
+app.include_router(dev.router)
 
 
-@app.get("/")
-async def get():
-    return {"message": "Root route works."}
+@app.get("/health")
+def health() -> dict:
+    return {"ok": True}
