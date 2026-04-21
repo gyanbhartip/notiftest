@@ -1,6 +1,6 @@
 import type { DeclineReason } from '../types/offer';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
+const API_BASE = process.env.EXPO_PUBLIC_FASTAPI_URL ?? 'http://127.0.0.1:8000';
 
 const RETRY_DELAYS_MS = [500, 1500, 4000];
 

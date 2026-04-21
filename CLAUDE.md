@@ -14,6 +14,7 @@ Client → backend env vars (both in `frontend/.env.local`, both need the `EXPO_
 
 - `EXPO_PUBLIC_WS_URL` — FastAPI WebSocket endpoint, read in `src/service/websocket.ts`.
 - `EXPO_PUBLIC_API_URL` — Django base URL, used by `src/service/fcm.ts` to POST the FCM token to `/fcm-token/`.
+- `EXPO_PUBLIC_FASTAPI_URL` - 
 
 ## Commands
 
