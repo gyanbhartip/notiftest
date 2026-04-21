@@ -85,7 +85,9 @@ async def decline_offer(
             raise HTTPException(status_code=cached.status_code, detail=cached.response)
         return cached.response
 
-    if body.reason == "other" and (not body.other_text or len(body.other_text.strip()) < 3):
+    if body.reason == "other" and (
+        not body.other_text or len(body.other_text.strip()) < 3
+    ):
         raise HTTPException(
             status_code=422,
             detail={"code": "other_text_required", "min_length": 3},

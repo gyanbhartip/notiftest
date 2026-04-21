@@ -7,7 +7,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from models.offer import JobDetails, JobDetailsActions, JobDetailsCustomer, OfferEnvelope
+from models.offer import (
+    JobDetails,
+    JobDetailsActions,
+    JobDetailsCustomer,
+    OfferEnvelope,
+)
 
 
 IDEM_TTL_S = 600  # 10 min
