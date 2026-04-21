@@ -17,8 +17,10 @@ type StatusListener = (s: Status) => void;
 
 let socket: WebSocket | null = null;
 const listeners = new Set<StatusListener>();
+let lastStatus: Status | null = null;
 
 const notify = (s: Status): void => {
+    lastStatus = s;
     listeners.forEach(l => l(s));
 };
 
@@ -148,5 +150,8 @@ export const disconnectWebSocket = (): void => {
 
 export const onWsStatus = (listener: StatusListener): (() => void) => {
     listeners.add(listener);
-    return () => listeners.delete(listener);
+    if (lastStatus !== null) listener(lastStatus);
+    return () => {
+        listeners.delete(listener);
+    };
 };
