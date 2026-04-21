@@ -1,15 +1,19 @@
-import messaging from '@react-native-firebase/messaging';
 import notifee, { EventType } from '@notifee/react-native';
+import messaging, {
+    type RemoteMessage,
+} from '@react-native-firebase/messaging';
 import { registerRootComponent } from 'expo';
-
 import App from './App';
 import { getDeviceId } from './src/service/deviceId';
-import { validateEnvelope, EnvelopeError } from './src/service/envelope';
+import { EnvelopeError, validateEnvelope } from './src/service/envelope';
 import { displayOfferNotification } from './src/service/notifications';
 import { acceptOfferHttp } from './src/service/offerApi';
 import { writePendingMutation } from './src/store/persistence';
 
-messaging().setBackgroundMessageHandler(async remoteMessage => {
+const handleFcmMessage = async (
+    remoteMessage: RemoteMessage,
+    context: 'foreground' | 'background',
+) => {
     try {
         const envelopeRaw = remoteMessage.data?.envelope;
         if (typeof envelopeRaw !== 'string' || !envelopeRaw) return;
@@ -17,12 +21,17 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
         await displayOfferNotification(envelope);
     } catch (err) {
         if (err instanceof EnvelopeError) {
-            console.warn('bad envelope in background FCM', err.message);
+            console.warn(`bad envelope in ${context} FCM`, err.message);
         } else {
-            console.warn('background FCM failed', err);
+            console.warn(`${context} FCM failed`, err);
         }
     }
-});
+};
+
+messaging().setBackgroundMessageHandler(msg =>
+    handleFcmMessage(msg, 'background'),
+);
+messaging().onMessage(msg => handleFcmMessage(msg, 'foreground'));
 
 notifee.onBackgroundEvent(async ({ type, detail }) => {
     if (type !== EventType.ACTION_PRESS) return;
