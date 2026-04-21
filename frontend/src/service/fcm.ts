@@ -33,7 +33,8 @@ export const onMessageReceived = async (remoteMessage: RemoteMessage) => {
         await ensureDefaultChannel();
 
         if (remoteMessage.data?.notifee) {
-            const payload = JSON.parse(remoteMessage.data.notifee);
+            const notifeeStr = remoteMessage.data.notifee;
+            const payload = JSON.parse(typeof notifeeStr === 'string' ? notifeeStr : JSON.stringify(notifeeStr));
             await notifee.displayNotification(payload);
             return;
         }
