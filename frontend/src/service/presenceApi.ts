@@ -1,8 +1,19 @@
 import type { PresenceIntent } from '../types/presence';
 
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
+
 export const setPresenceIntent = async (
-    _deviceId: string,
-    _intent: PresenceIntent,
+    deviceId: string,
+    intent: PresenceIntent,
 ): Promise<{ server_time: string }> => {
-    throw new Error('not implemented — replaced in Task 18');
+    const resp = await fetch(`${API_BASE}/api/presence/${intent}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: deviceId }),
+    });
+    if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+    }
+    const json = (await resp.json()) as { server_time: string };
+    return json;
 };
