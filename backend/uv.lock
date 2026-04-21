@@ -425,6 +425,7 @@ dependencies = [
     { name = "djangorestframework" },
     { name = "fastapi", extra = ["standard"] },
     { name = "firebase-admin" },
+    { name = "httpx" },
     { name = "markdown" },
     { name = "websockets" },
 ]
@@ -442,6 +443,7 @@ requires-dist = [
     { name = "djangorestframework", specifier = ">=3.17.1" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.0" },
     { name = "firebase-admin", specifier = ">=7.4.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "markdown", specifier = ">=3.10.2" },
     { name = "websockets", specifier = ">=16.0" },
 ]
