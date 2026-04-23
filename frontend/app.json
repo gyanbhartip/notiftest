@@ -12,7 +12,9 @@
             "backgroundColor": "#ffffff"
         },
         "ios": {
-            "supportsTablet": true
+            "supportsTablet": true,
+            "bundleIdentifier": "com.gb.notiftest",
+            "googleServicesFile": "./GoogleService-Info.plist"
         },
         "android": {
             "adaptiveIcon": {
@@ -35,10 +37,15 @@
                     "android": {
                         "extraMavenRepos": [
                             "../../node_modules/@notifee/react-native/android/libs"
-                        ]
+                        ],
+                        "usesCleartextTraffic": true
+                    },
+                    "ios": {
+                        "useFrameworks": "static"
                     }
                 }
             ]
-        ]
+        ],
+        "scheme": "notiftest"
     }
 }

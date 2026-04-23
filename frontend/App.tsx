@@ -1,55 +1,95 @@
-import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { getDeviceId } from './src/service/deviceId';
-import { getAndSendFcmToken } from './src/service/fcm';
-import { initializeNotifee } from './src/service/notifications';
+import messaging from '@react-native-firebase/messaging';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-    connectWebSocket,
-    disconnectWebSocket,
-    onWsStatus,
-} from './src/service/websocket';
+    ActivityIndicator,
+    AppState,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
+import { Provider } from 'react-redux';
 
-const App = () => {
-    const [wsStatus, setWsStatus] = useState<string>('idle');
-    const deviceId = getDeviceId();
+import { RootNavigator } from './src/nav/RootNavigator';
+import { EnvelopeError, validateEnvelope } from './src/service/envelope';
+import { getAndSendFcmToken } from './src/service/fcm';
+import { connectWebSocket, disconnectWebSocket } from './src/service/websocket';
+import { store } from './src/store';
+import { initializeBoot } from './src/store/bootSlice';
+import { offerReceived } from './src/store/offerSlice';
+
+const HydrationSplash = () => (
+    <View style={styles.splash}>
+        <ActivityIndicator />
+        <Text style={styles.splashText}>Loading…</Text>
+    </View>
+);
+
+const InnerApp = () => {
+    const appStateRef = useRef(AppState.currentState);
 
     useEffect(() => {
-        initializeNotifee();
-        getAndSendFcmToken();
-        connectWebSocket(deviceId);
-        const unsubscribe = onWsStatus(setWsStatus);
+        void getAndSendFcmToken();
+        void connectWebSocket();
+        const unsub = async (remoteMessage: unknown) => {
+            try {
+                const msg = remoteMessage as Record<string, unknown>;
+                const data = msg?.data as Record<string, unknown> | undefined;
+                const raw = data?.envelope;
+                if (typeof raw !== 'string') return;
+                const envelope = validateEnvelope(JSON.parse(raw));
+                store.dispatch(offerReceived(envelope));
+            } catch (err) {
+                if (err instanceof EnvelopeError) {
+                    console.warn('bad foreground FCM envelope', err.message);
+                }
+            }
+        };
+        const offMessage = messaging().onMessage(unsub);
         return () => {
-            unsubscribe();
+            offMessage();
             disconnectWebSocket();
         };
-    }, [deviceId]);
+    }, []);
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener(
+            'change',
+            nextAppState => {
+                const wasBackground = ['background', 'inactive'].includes(
+                    appStateRef.current,
+                );
+                const isActive = nextAppState === 'active';
+                appStateRef.current = nextAppState;
+                if (wasBackground && isActive) {
+                    void connectWebSocket();
+                }
+            },
+        );
+        return () => subscription.remove();
+    }, []);
+
+    return <RootNavigator />;
+};
+
+const App = () => {
+    const [hydrated, setHydrated] = useState(false);
+
+    useEffect(() => {
+        void store.dispatch(initializeBoot()).finally(() => setHydrated(true));
+    }, []);
+
+    if (!hydrated) return <HydrationSplash />;
 
     return (
-        <>
-            <StatusBar style="auto" />
-            <View style={styles.container}>
-                <Text style={styles.heading}>notiftest</Text>
-                <Text>device_id: {deviceId}</Text>
-                <Text>WS: {wsStatus}</Text>
-            </View>
-        </>
+        <Provider store={store}>
+            <InnerApp />
+        </Provider>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-    },
-    heading: {
-        fontSize: 20,
-        fontWeight: '600',
-        marginBottom: 12,
-    },
+    splash: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+    splashText: { color: '#555' },
 });
 
 export default App;

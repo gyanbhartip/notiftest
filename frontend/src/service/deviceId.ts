@@ -5,4 +5,7 @@ const deviceId =
     '-' +
     Date.now().toString(36);
 
-export const getDeviceId = () => deviceId;
+export const getDeviceId = () => {
+    console.log('deviceId', deviceId);
+    return deviceId;
+};

@@ -77,3 +77,44 @@ def test_send_fcm(request):
 
     sent = send_fcm_notification(device_id, title, body)
     return JsonResponse({"status": "sent" if sent else "failed", "count": sent})
+
+
+# --- offer push (data-only, Notifee renders locally) ---
+from django.views.decorators.http import require_POST
+
+
+@csrf_exempt
+@require_POST
+def send_fcm_offer(request):
+    device_id = request.POST.get("device_id", "").strip()
+    envelope_json = request.POST.get("envelope", "").strip()
+    if not device_id or not envelope_json:
+        return JsonResponse({"error": "device_id and envelope required"}, status=400)
+
+    try:
+        # Validate JSON shape — we re-stringify below for safety.
+        envelope = json.loads(envelope_json)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "envelope is not valid json"}, status=400)
+
+    try:
+        token_row = FCMToken.objects.get(device_id=device_id)
+    except FCMToken.DoesNotExist:
+        return JsonResponse({"error": "device_id not registered"}, status=404)
+
+    message = messaging.Message(
+        token=token_row.token,
+        data={
+            "envelope": json.dumps(envelope),
+            "v": "1",
+        },
+        android=messaging.AndroidConfig(
+            priority="high",
+        ),
+    )
+    try:
+        response = messaging.send(message)
+    except Exception as exc:  # noqa: BLE001
+        return JsonResponse({"error": "fcm_send_failed", "detail": str(exc)}, status=502)
+
+    return JsonResponse({"ok": True, "message_id": response})

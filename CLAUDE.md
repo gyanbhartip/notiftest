@@ -14,6 +14,7 @@ Client → backend env vars (both in `frontend/.env.local`, both need the `EXPO_
 
 - `EXPO_PUBLIC_WS_URL` — FastAPI WebSocket endpoint, read in `src/service/websocket.ts`.
 - `EXPO_PUBLIC_API_URL` — Django base URL, used by `src/service/fcm.ts` to POST the FCM token to `/fcm-token/`.
+- `EXPO_PUBLIC_FASTAPI_URL` - 
 
 ## Commands
 
@@ -130,6 +131,16 @@ Postman: `POST http://<host>:8001/test/send-fcm/` with `x-www-form-urlencoded` b
 - **Python version**: 3.14 is pinned. `uv` will refuse to run on older interpreters — install via `uv python install 3.14` if missing.
 - **TypeScript**: `strict: true` via `expo/tsconfig.base`. Don't loosen.
 - **Env vars on the client**: Only `EXPO_PUBLIC_*` variables are exposed to RN code. Anything without that prefix will be `undefined` at runtime.
+
+## Firebase Messaging Quirks
+
+`@react-native-firebase/messaging` has loose types:
+- `onMessage()` doesn't accept the `FirebaseMessagingTypes.MessageHandler` type signature. Use `(msg: unknown) => Promise<void>` and cast payload within handler.
+- `remoteMessage.data` typed as `object`, not `Record<string, string>`. Cast and guard: `const data = msg?.data as Record<string, unknown>; if (typeof data?.key !== 'string') return;` before parsing.
+
+## Python Lint: ruff format vs check
+
+`ruff check` and `ruff format --check` are independent. `check` may pass while `format --check` fails (whitespace, trailing commas). Run both before submitting, or run `ruff format .` once to auto-fix.
 
 ## Deployment model
 
