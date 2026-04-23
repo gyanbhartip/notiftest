@@ -3,9 +3,9 @@ import {
     type LinkingOptions,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import React from 'react';
 import { SafeAreaView, StyleSheet, Text } from 'react-native';
 
+import { OfferOverlay } from '../offer/OfferOverlay';
 import { PresenceToggle } from '../presence/PresenceToggle';
 import { useAppSelector } from '../store';
 import { JobDetailsScreen } from './JobDetailsScreen';
@@ -48,6 +48,7 @@ export const RootNavigator = () => (
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
         </Stack.Navigator>
+        <OfferOverlay />
     </NavigationContainer>
 );
 

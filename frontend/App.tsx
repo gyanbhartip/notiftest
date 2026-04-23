@@ -10,7 +10,6 @@ import {
 import { Provider } from 'react-redux';
 
 import { RootNavigator } from './src/nav/RootNavigator';
-import { OfferOverlay } from './src/offer/OfferOverlay';
 import { EnvelopeError, validateEnvelope } from './src/service/envelope';
 import { getAndSendFcmToken } from './src/service/fcm';
 import { connectWebSocket, disconnectWebSocket } from './src/service/websocket';
@@ -69,12 +68,7 @@ const InnerApp = () => {
         return () => subscription.remove();
     }, []);
 
-    return (
-        <>
-            <RootNavigator />
-            <OfferOverlay />
-        </>
-    );
+    return <RootNavigator />;
 };
 
 const App = () => {

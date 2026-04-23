@@ -1,3 +1,5 @@
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
@@ -9,6 +11,7 @@ import {
     Vibration,
     View,
 } from 'react-native';
+import type { RootStackParamList } from '../nav/RootNavigator';
 import { getDeviceId } from '../service/deviceId';
 import { useAppDispatch, useAppSelector } from '../store';
 import {
@@ -28,6 +31,8 @@ const formatRemaining = (ms: number): string => {
 
 export const OfferOverlay = () => {
     const dispatch = useAppDispatch();
+    const navigation =
+        useNavigation<NativeStackNavigationProp<RootStackParamList>>();
     const activeOffer = useAppSelector(s => s.offer.activeOffer);
     const pendingAction = useAppSelector(s => s.offer.pendingAction);
     const postError = useAppSelector(s => s.offer.postError);
@@ -41,10 +46,15 @@ export const OfferOverlay = () => {
     const handleAccept = useCallback(async () => {
         if (!activeOffer) return;
         const device_id = await getDeviceId();
-        await dispatch(
+        const result = await dispatch(
             acceptOffer({ offer_id: activeOffer.offer_id, device_id }),
         );
-    }, [activeOffer, dispatch]);
+        if (result.meta.requestStatus === 'fulfilled') {
+            navigation.navigate('JobDetails', {
+                offer_id: activeOffer.offer_id,
+            });
+        }
+    }, [activeOffer, dispatch, navigation]);
 
     const handleDeclineSubmit = useCallback(
         async (reason: DeclineReason) => {
