@@ -4,10 +4,9 @@ from __future__ import annotations
 import os
 
 import httpx
-
 from models.offer import OfferEnvelope
 
-DJANGO_BASE_URL = os.getenv("DJANGO_BASE_URL", "http://127.0.0.1:8001")
+DJANGO_BASE_URL = os.getenv("DJANGO_BASE_URL", "http://127.0.0.1:9005")
 
 
 async def send_offer_via_fcm(device_id: str, envelope: OfferEnvelope) -> None:

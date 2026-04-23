@@ -31,6 +31,8 @@ export const ensureOffersChannel = async (): Promise<void> => {
         id: OFFERS_CHANNEL_ID,
         name: 'Offers',
         importance: AndroidImportance.HIGH,
+        sound: 'default',
+        vibration: true,
     });
 };
 

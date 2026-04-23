@@ -6,7 +6,10 @@ import { registerRootComponent } from 'expo';
 import App from './App';
 import { getDeviceId } from './src/service/deviceId';
 import { EnvelopeError, validateEnvelope } from './src/service/envelope';
-import { displayOfferNotification } from './src/service/notifications';
+import {
+    displayOfferNotification,
+    initializeNotifee,
+} from './src/service/notifications';
 import { acceptOfferHttp } from './src/service/offerApi';
 import { writePendingMutation } from './src/store/persistence';
 
@@ -14,11 +17,20 @@ const handleFcmMessage = async (
     remoteMessage: RemoteMessage,
     context: 'foreground' | 'background',
 ) => {
+    console.log(
+        `📨 FCM ${context} received:`,
+        JSON.stringify(remoteMessage.data),
+    );
     try {
         const envelopeRaw = remoteMessage.data?.envelope;
-        if (typeof envelopeRaw !== 'string' || !envelopeRaw) return;
+        if (typeof envelopeRaw !== 'string' || !envelopeRaw) {
+            console.warn(`📨 FCM ${context}: no envelope in data`);
+            return;
+        }
         const envelope = validateEnvelope(JSON.parse(envelopeRaw));
+        console.log(`📨 FCM ${context}: envelope valid, displaying...`);
         await displayOfferNotification(envelope);
+        console.log(`📨 FCM ${context}: notification displayed`);
     } catch (err) {
         if (err instanceof EnvelopeError) {
             console.warn(`bad envelope in ${context} FCM`, err.message);
@@ -53,4 +65,5 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
     }
 });
 
+void initializeNotifee();
 registerRootComponent(App);

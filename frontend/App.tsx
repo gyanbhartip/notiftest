@@ -1,19 +1,19 @@
 import messaging from '@react-native-firebase/messaging';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    AppState,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
 import { Provider } from 'react-redux';
 
-import { OfferOverlay } from './src/offer/OfferOverlay';
 import { RootNavigator } from './src/nav/RootNavigator';
+import { OfferOverlay } from './src/offer/OfferOverlay';
+import { EnvelopeError, validateEnvelope } from './src/service/envelope';
 import { getAndSendFcmToken } from './src/service/fcm';
-import {
-    validateEnvelope,
-    EnvelopeError,
-} from './src/service/envelope';
-import {
-    connectWebSocket,
-    disconnectWebSocket,
-} from './src/service/websocket';
+import { connectWebSocket, disconnectWebSocket } from './src/service/websocket';
 import { store } from './src/store';
 import { initializeBoot } from './src/store/bootSlice';
 import { offerReceived } from './src/store/offerSlice';
@@ -26,6 +26,8 @@ const HydrationSplash = () => (
 );
 
 const InnerApp = () => {
+    const appStateRef = useRef(AppState.currentState);
+
     useEffect(() => {
         void getAndSendFcmToken();
         void connectWebSocket();
@@ -48,6 +50,23 @@ const InnerApp = () => {
             offMessage();
             disconnectWebSocket();
         };
+    }, []);
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener(
+            'change',
+            nextAppState => {
+                const wasBackground = ['background', 'inactive'].includes(
+                    appStateRef.current,
+                );
+                const isActive = nextAppState === 'active';
+                appStateRef.current = nextAppState;
+                if (wasBackground && isActive) {
+                    void connectWebSocket();
+                }
+            },
+        );
+        return () => subscription.remove();
     }, []);
 
     return (
